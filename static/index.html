@@ -1,0 +1,1431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TVV - Watch Together</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-card: #1a1a25;
+    --bg-hover: #252535;
+    --accent-primary: #6366f1;
+    --accent-secondary: #8b5cf6;
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --info: #3b82f6;
+    --border-radius: 12px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* Join Dialog */
+  .join-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .join-overlay.hidden { display: none; }
+  .join-dialog { background: var(--bg-secondary); border-radius: var(--border-radius); padding: 40px; width: 100%; max-width: 420px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .join-logo { text-align: center; margin-bottom: 32px; }
+  .join-logo i { font-size: 3rem; color: var(--accent-primary); margin-bottom: 16px; }
+  .join-logo h1 { font-size: 1.75rem; font-weight: 700; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .join-logo p { color: var(--text-secondary); margin-top: 8px; font-size: 0.9375rem; }
+  .form-group { margin-bottom: 20px; }
+  .form-label { display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); }
+  .form-input { width: 100%; padding: 12px 16px; background: var(--bg-card); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--border-radius); color: var(--text-primary); font-size: 0.9375rem; transition: var(--transition); }
+  .form-input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+  .form-input::placeholder { color: var(--text-muted); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border: none; border-radius: var(--border-radius); font-size: 0.9375rem; font-weight: 500; cursor: pointer; transition: var(--transition); text-decoration: none; width: 100%; }
+  .btn-primary { background: var(--accent-gradient); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.1); }
+  .btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.2); }
+  .btn-sm { padding: 8px 16px; font-size: 0.875rem; width: auto; }
+
+  /* Header */
+  .header { background: var(--bg-secondary); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  .logo { display: flex; align-items: center; gap: 12px; font-size: 1.5rem; font-weight: 700; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .logo i { font-size: 1.75rem; -webkit-text-fill-color: initial; color: var(--accent-primary); }
+  .room-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .room-badge { display: flex; align-items: center; gap: 8px; background: var(--bg-card); padding: 8px 16px; border-radius: var(--border-radius); border: 1px solid rgba(255,255,255,0.1); }
+  .room-badge i { color: var(--accent-primary); }
+  .room-badge span { font-size: 0.875rem; color: var(--text-secondary); }
+  .room-badge strong { color: var(--text-primary); margin-left: 4px; }
+
+  .status { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; color: var(--text-secondary); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); transition: var(--transition); }
+  .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .status-dot.connecting { background: var(--warning); animation: pulse 1.5s infinite; }
+  .status-dot.error { background: var(--error); }
+  @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.5;} }
+
+  /* Main Content */
+  .main-content { flex: 1; display: flex; gap: 24px; padding: 24px; overflow: hidden; }
+  .video-section { flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .video-container { position: relative; background: var(--bg-secondary); border-radius: var(--border-radius); overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  #player { width: 100%; height: 100%; display: block; background: #000; }
+
+  .custom-controls { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 60%, transparent 100%); padding: 20px 16px 16px; opacity: 0; transition: var(--transition); display: flex; flex-direction: column; gap: 12px; }
+  .video-container:hover .custom-controls, .video-container.paused .custom-controls, .video-container.show-controls .custom-controls { opacity: 1; }
+
+  .progress-container { position: relative; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; cursor: pointer; overflow: visible; }
+  .progress-bar { height: 100%; background: var(--accent-gradient); border-radius: 3px; position: relative; width: 0%; transition: width 0.1s linear; }
+  .progress-handle { position: absolute; right: -8px; top: 50%; transform: translateY(-50%) scale(0); width: 16px; height: 16px; background: white; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: var(--transition); }
+  .progress-container:hover .progress-handle, .progress-container.dragging .progress-handle { transform: translateY(-50%) scale(1); }
+  .progress-tooltip { position: absolute; top: -40px; transform: translateX(-50%); background: var(--bg-card); padding: 6px 12px; border-radius: 6px; font-size: 0.8125rem; opacity: 0; transition: var(--transition); pointer-events: none; white-space: nowrap; }
+  .progress-container:hover .progress-tooltip { opacity: 1; }
+
+  .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .controls-left, .controls-right { display:flex; align-items:center; gap:8px; }
+  .control-btn { width: 40px; height: 40px; border: none; background: transparent; color: white; font-size: 1.125rem; cursor: pointer; border-radius: 50%; transition: var(--transition); display:flex; align-items:center; justify-content:center; }
+  .control-btn:hover { background: rgba(255,255,255,0.1); transform: scale(1.1); }
+  .control-btn.play-btn { width: 48px; height: 48px; background: var(--accent-gradient); font-size: 1.25rem; }
+  .control-btn.play-btn:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+
+  .time-display { font-size: 0.875rem; color: rgba(255,255,255,0.9); font-variant-numeric: tabular-nums; min-width: 110px; text-align: center; }
+
+  .volume-container { display:flex; align-items:center; gap:8px; }
+  .volume-slider { width: 0; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; transition: var(--transition); cursor: pointer; }
+  .volume-container:hover .volume-slider { width: 80px; }
+  .volume-level { height: 100%; background: white; width: 70%; border-radius: 2px; }
+
+  .video-info { background: var(--bg-secondary); border-radius: var(--border-radius); padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
+  .video-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+  .video-meta { display:flex; align-items:center; gap:16px; color: var(--text-secondary); font-size: 0.875rem; flex-wrap: wrap; }
+  .video-meta span { display:flex; align-items:center; gap:6px; }
+
+  /* Sidebar */
+  .sidebar { width: 360px; min-width: 320px; background: var(--bg-secondary); border-radius: var(--border-radius); border: 1px solid rgba(255,255,255,0.05); display:flex; flex-direction:column; overflow: hidden; }
+  .sidebar-header { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; align-items:center; justify-content:space-between; }
+  .sidebar-title { font-size: 1.125rem; font-weight:600; display:flex; align-items:center; gap:10px; }
+  .sidebar-title i { color: var(--accent-primary); }
+  .badge { background: var(--accent-gradient); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+
+  /* Tabs */
+  .sidebar-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .sidebar-tab { flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); font-size: 0.875rem; cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .sidebar-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .sidebar-tab.active { color: var(--accent-primary); border-bottom: 2px solid var(--accent-primary); }
+
+  .sidebar-content { flex:1; overflow-y:auto; }
+  .sidebar-content::-webkit-scrollbar { width: 6px; }
+  .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-content::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
+  .sidebar-content::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  .tab-panel { display: none; padding: 16px; }
+  .tab-panel.active { display: block; }
+
+  /* Video List */
+  .video-list-section { margin-bottom: 20px; }
+  .section-title { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .video-item { display:flex; align-items:center; gap:12px; padding:12px; border-radius: var(--border-radius); cursor:pointer; transition: var(--transition); margin-bottom:8px; background: var(--bg-card); border: 1px solid transparent; }
+  .video-item:hover { background: var(--bg-hover); border-color: rgba(99, 102, 241, 0.3); }
+  .video-item.active { background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.5); }
+
+  .video-thumbnail { width:60px; height:36px; background: var(--bg-hover); border-radius: 6px; display:flex; align-items:center; justify-content:center; color: var(--text-muted); font-size:1rem; flex-shrink:0; }
+  .video-item-info { flex:1; min-width:0; }
+  .video-item-title { font-size: 0.875rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow: ellipsis; margin-bottom:4px; }
+  .video-item-meta { font-size: 0.75rem; color: var(--text-muted); display:flex; align-items:center; gap:8px; }
+
+  .play-icon { width:28px; height:28px; border-radius:50%; background: var(--accent-gradient); display:flex; align-items:center; justify-content:center; color:white; font-size:0.625rem; opacity:0; transform: scale(0.8); transition: var(--transition); flex-shrink:0; }
+  .video-item:hover .play-icon { opacity:1; transform:scale(1); }
+
+  /* External URL Input */
+  .external-url-group { display: flex; gap: 8px; margin-top: 12px; }
+  .external-url-group .form-input { flex: 1; }
+
+  /* Participant List */
+  .participant-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--border-radius); background: var(--bg-card); margin-bottom: 8px; }
+  .participant-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; flex-shrink: 0; }
+  .participant-avatar.you { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+  .participant-info { flex: 1; }
+  .participant-name { font-size: 0.9375rem; font-weight: 500; }
+  .participant-name .you-badge { font-size: 0.75rem; color: var(--success); margin-left: 6px; }
+  .participant-id { font-size: 0.75rem; color: var(--text-muted); }
+
+  /* Event Log */
+  .log-container { background: var(--bg-card); border-radius: var(--border-radius); padding: 12px; max-height: 400px; overflow-y: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.8125rem; line-height: 1.5; }
+  .log-container::-webkit-scrollbar { width: 6px; }
+  .log-container::-webkit-scrollbar-track { background: transparent; }
+  .log-container::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
+  .log-entry { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; gap: 10px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: var(--text-muted); white-space: nowrap; font-size: 0.75rem; }
+  .log-message { color: var(--text-secondary); word-break: break-word; }
+  .log-entry.success .log-message { color: var(--success); }
+  .log-entry.error .log-message { color: var(--error); }
+  .log-entry.info .log-message { color: var(--info); }
+  .log-entry.warning .log-message { color: var(--warning); }
+
+  .empty-state { text-align:center; padding:40px 20px; color: var(--text-muted); }
+  .empty-state i { font-size:3rem; margin-bottom:16px; opacity:0.5; }
+  .empty-state p { font-size:0.9375rem; }
+
+  .spinner { width:40px; height:40px; border:3px solid rgba(255,255,255,0.1); border-top-color: var(--accent-primary); border-radius:50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-overlay { position:absolute; inset:0; background: rgba(0,0,0,0.8); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:10; }
+  .loading-overlay.hidden { display: none; }
+
+  @media (max-width: 1024px) { .main-content { flex-direction: column; } .sidebar { width:100%; min-width:auto; max-height:500px; } }
+  @media (max-width: 640px) { .header { padding: 12px 16px; } .logo { font-size: 1.25rem; } .room-info { width:100%; } .main-content { padding:16px; } .controls-row { gap:8px; } .time-display { font-size:0.75rem; min-width:auto; } .control-btn { width:36px; height:36px; font-size:1rem; } .control-btn.play-btn { width:40px; height:40px; } }
+
+  .video-container:fullscreen,
+  .video-container:-webkit-full-screen,
+  .video-container:-moz-full-screen,
+  .video-container:-ms-fullscreen {
+    border-radius: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+  }
+
+  .video-container:fullscreen .custom-controls,
+  .video-container:-webkit-full-screen .custom-controls,
+  .video-container:-moz-full-screen .custom-controls,
+  .video-container:-ms-fullscreen .custom-controls {
+    opacity: 1;
+  }
+
+  /* Mobile fullscreen improvements */
+  @media (max-width: 640px) {
+    .video-container:-webkit-full-screen {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    
+    .video-container:fullscreen #player,
+    .video-container:-webkit-full-screen #player {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain;
+    }
+  }
+
+  .format-warning { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warning); padding: 12px 16px; border-radius: var(--border-radius); font-size:0.875rem; display:flex; align-items:center; gap:10px; margin-top:12px; }
+  .format-warning.hidden { display: none; }
+  .loading-overlay .loading-text { font-size: 0.9375rem; color: var(--text-secondary); }
+  .loading-overlay .loading-subtext { font-size: 0.8125rem; color: var(--text-muted); }
+  .buffer-progress-bar { position:absolute; top:0; left:0; height:100%; background: rgba(255,255,255,0.3); border-radius:3px; width:0%; transition: width 0.3s ease; pointer-events:none; }
+  .error-overlay { position:absolute; inset:0; background: rgba(0,0,0,0.9); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:20; padding:20px; text-align:center; }
+  .error-overlay.hidden { display:none; }
+  .error-icon { font-size:3rem; color: var(--error); }
+  .error-title { font-size:1.25rem; font-weight:600; color: var(--text-primary); }
+  .error-message { font-size:0.9375rem; color: var(--text-secondary); max-width:400px; }
+
+  /* Drift indicator */
+  .drift-indicator { font-size: 0.75rem; color: var(--text-muted); margin-left: 8px; }
+  .drift-indicator.syncing { color: var(--warning); }
+</style>
+</head>
+<body>
+  <!-- Join Dialog -->
+  <div class="join-overlay" id="joinOverlay">
+    <div class="join-dialog">
+      <div class="join-logo">
+        <i class="fas fa-play-circle"></i>
+        <h1>TVV Watch Together</h1>
+        <p>Join a room to watch videos with friends</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Room Key</label>
+        <input type="text" class="form-input" id="joinRoomKey" placeholder="Enter room name" value="default">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nickname (optional)</label>
+        <input type="text" class="form-input" id="joinNickname" placeholder="Your nickname">
+      </div>
+      <button class="btn btn-primary" id="joinBtn">
+        <i class="fas fa-sign-in-alt"></i>
+        <span>Join Room</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="header" id="mainHeader" style="display: none;">
+    <div class="logo">
+      <i class="fas fa-play-circle"></i>
+      <span>TVV</span>
+    </div>
+
+    <div class="room-info">
+      <div class="room-badge">
+        <i class="fas fa-door-open"></i>
+        <span>Room:<strong id="roomKeyDisplay">-</strong></span>
+      </div>
+      <div class="room-badge">
+        <i class="fas fa-user"></i>
+        <span id="userDisplay">-</span>
+      </div>
+    </div>
+
+    <div class="status" id="statusContainer">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Disconnected</span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content" id="mainContent" style="display: none;">
+    <!-- Video Section -->
+    <section class="video-section">
+      <div class="video-container" id="videoContainer">
+        <video id="player" playsinline webkit-playsinline preload="metadata"></video>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay hidden" id="loadingOverlay">
+          <div class="spinner"></div>
+          <span class="loading-text" id="loadingText">Loading...</span>
+          <span class="loading-subtext" id="loadingSubtext"></span>
+        </div>
+
+        <!-- Error Overlay -->
+        <div class="error-overlay hidden" id="errorOverlay">
+          <div class="error-icon"><i class="fas fa-exclamation-triangle"></i></div>
+          <div class="error-title" id="errorTitle">Playback Error</div>
+          <div class="error-message" id="errorMessage">An error occurred while loading the video</div>
+          <button class="btn btn-primary error-retry-btn" id="errorRetryBtn" style="width: auto;">
+            <i class="fas fa-redo"></i> Try Again
+          </button>
+        </div>
+
+        <!-- Custom Controls -->
+        <div class="custom-controls" id="customControls">
+          <!-- Progress Bar -->
+          <div class="progress-container" id="progressContainer">
+            <div class="buffer-progress-bar" id="bufferProgressBar"></div>
+            <div class="progress-bar" id="progressBar">
+              <div class="progress-handle"></div>
+            </div>
+            <div class="progress-tooltip" id="progressTooltip">00:00</div>
+          </div>
+
+          <!-- Controls Row -->
+          <div class="controls-row">
+            <div class="controls-left">
+              <button class="control-btn play-btn" id="playBtn">
+                <i class="fas fa-play"></i>
+              </button>
+              <button class="control-btn" id="prevBtn" title="Previous video">
+                <i class="fas fa-step-backward"></i>
+              </button>
+              <button class="control-btn" id="nextBtn" title="Next video">
+                <i class="fas fa-step-forward"></i>
+              </button>
+
+              <div class="volume-container">
+                <button class="control-btn" id="muteBtn">
+                  <i class="fas fa-volume-up"></i>
+                </button>
+                <div class="volume-slider" id="volumeSlider" role="slider" aria-label="Volume">
+                  <div class="volume-level" id="volumeLevel"></div>
+                </div>
+              </div>
+
+              <span class="time-display" id="timeDisplay">00:00 / 00:00</span>
+            </div>
+
+            <div class="controls-right">
+              <span class="drift-indicator" id="driftIndicator"></span>
+              <button class="control-btn" id="syncBtn" title="Request sync">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+              <button class="control-btn" id="fullscreenBtn" title="Fullscreen">
+                <i class="fas fa-expand"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Info -->
+      <div class="video-info">
+        <h2 class="video-title" id="videoTitle">Select a video to watch</h2>
+        <div class="video-meta">
+          <span id="videoResolution"><i class="fas fa-tv"></i> --</span>
+          <span id="videoFormat"><i class="fas fa-file-video"></i> --</span>
+          <span id="syncStatus" style="display: none;"><i class="fas fa-users"></i> Synchronized</span>
+        </div>
+        <div class="format-warning hidden" id="formatWarning">
+          <i class="fas fa-exclamation-circle"></i>
+          <span>This video format may not be supported by your browser</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="videos">
+          <i class="fas fa-film"></i> Videos
+        </button>
+        <button class="sidebar-tab" data-tab="participants">
+          <i class="fas fa-users"></i> People
+        </button>
+        <button class="sidebar-tab" data-tab="log">
+          <i class="fas fa-terminal"></i> Log
+        </button>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Videos Tab -->
+        <div class="tab-panel active" id="videosPanel">
+          <div class="video-list-section">
+            <div class="section-title">Available Videos</div>
+            <div id="videoList">
+              <div class="empty-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading videos...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="video-list-section">
+            <div class="section-title">External URL</div>
+            <div class="external-url-group">
+              <input type="text" class="form-input" id="externalUrlInput" placeholder="https://example.com/video.mp4">
+              <button class="btn btn-primary btn-sm" id="loadExternalBtn">
+                <i class="fas fa-play"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Participants Tab -->
+        <div class="tab-panel" id="participantsPanel">
+          <div id="participantsList">
+            <div class="empty-state">
+              <i class="fas fa-users"></i>
+              <p>No participants yet</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Tab -->
+        <div class="tab-panel" id="logPanel">
+          <div class="log-container" id="eventLog">
+            <div class="log-entry">
+              <span class="log-time">--:--:--</span>
+              <span class="log-message">Waiting to join...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+<script>
+(() => {
+  // ========== DOM Elements ==========
+  // Join dialog
+  const joinOverlay = document.getElementById('joinOverlay');
+  const joinRoomKey = document.getElementById('joinRoomKey');
+  const joinNickname = document.getElementById('joinNickname');
+  const joinBtn = document.getElementById('joinBtn');
+
+  // Main UI
+  const mainHeader = document.getElementById('mainHeader');
+  const mainContent = document.getElementById('mainContent');
+  const roomKeyDisplay = document.getElementById('roomKeyDisplay');
+  const userDisplay = document.getElementById('userDisplay');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+
+  // Video player
+  const player = document.getElementById('player');
+  const videoContainer = document.getElementById('videoContainer');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const loadingText = document.getElementById('loadingText');
+  const loadingSubtext = document.getElementById('loadingSubtext');
+  const errorOverlay = document.getElementById('errorOverlay');
+  const errorTitle = document.getElementById('errorTitle');
+  const errorMessage = document.getElementById('errorMessage');
+  const errorRetryBtn = document.getElementById('errorRetryBtn');
+  const formatWarning = document.getElementById('formatWarning');
+  const bufferProgressBar = document.getElementById('bufferProgressBar');
+
+  // Controls
+  const playBtn = document.getElementById('playBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const volumeSlider = document.getElementById('volumeSlider');
+  const volumeLevel = document.getElementById('volumeLevel');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const syncBtn = document.getElementById('syncBtn');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const driftIndicator = document.getElementById('driftIndicator');
+
+  // Progress
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+  const progressTooltip = document.getElementById('progressTooltip');
+
+  // Info & lists
+  const videoTitle = document.getElementById('videoTitle');
+  const videoResolution = document.getElementById('videoResolution');
+  const videoFormat = document.getElementById('videoFormat');
+  const syncStatus = document.getElementById('syncStatus');
+  const videoList = document.getElementById('videoList');
+  const externalUrlInput = document.getElementById('externalUrlInput');
+  const loadExternalBtn = document.getElementById('loadExternalBtn');
+  const participantsList = document.getElementById('participantsList');
+  const eventLog = document.getElementById('eventLog');
+
+  // Tabs
+  const sidebarTabs = document.querySelectorAll('.sidebar-tab');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  // ========== State ==========
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsUrl = wsProto + '://' + location.host + '/ws';
+  let ws = null;
+  let currentRoom = null;
+  let myUserId = null;
+  let myNickname = null;
+  let videos = [];
+  let currentVideoIndex = -1;
+  let isDragging = false;
+  let wasPlayingBeforeDrag = false;
+  let lastVolume = 0.7;
+  let retryCount = 0;
+  const maxRetries = 3;
+  let lastVideoUrl = null;
+  let lastVideoTime = 0;
+  let participants = new Map(); // user_id -> {nickname, isSelf}
+  let isSyncing = false;
+  let reconnectAttempts = 0;
+  let reconnectTimer = null;
+  const maxReconnectAttempts = 5;
+  let isBuffering = false;
+  let bufferingStartTime = null;
+  const MAX_BUFFERING_TIME = 15000; // 15 seconds
+  let bufferingTimer = null;
+
+  const problematicFormats = ['mkv','mov','avi','flv','wmv'];
+
+  // ========== Initialization ==========
+  player.volume = lastVolume;
+  updateVolumeUI();
+  loadVideos();
+  logEvent('Application initialized', 'info');
+
+  // ========== Join Dialog ==========
+  joinBtn.addEventListener('click', () => {
+    const roomKey = (joinRoomKey.value || 'default').trim();
+    const nickname = (joinNickname.value || '').trim();
+    if (!roomKey) {
+      alert('Please enter a room key');
+      return;
+    }
+    connect(roomKey, nickname);
+  });
+
+  joinRoomKey.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') joinBtn.click();
+  });
+
+  joinNickname.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') joinBtn.click();
+  });
+
+  // ========== Tab Switching ==========
+  sidebarTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.dataset.tab;
+      sidebarTabs.forEach(t => t.classList.remove('active'));
+      tabPanels.forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(targetTab + 'Panel').classList.add('active');
+    });
+  });
+
+  // ========== Video List ==========
+  async function loadVideos() {
+    try {
+      const response = await fetch('/api/videos');
+      if (!response.ok) throw new Error('Network response not ok');
+      const data = await response.json();
+      videos = data.videos || [];
+      renderVideoList();
+    } catch (err) {
+      console.error('Failed to load videos:', err);
+      videoList.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-exclamation-circle"></i>
+          <p>Error loading videos</p>
+        </div>
+      `;
+    }
+  }
+
+  function renderVideoList() {
+    if (videos.length === 0) {
+      videoList.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-film"></i>
+          <p>No videos available</p>
+          <p style="font-size:0.8125rem; margin-top:8px;">Add videos to static/videos folder</p>
+        </div>`;
+      return;
+    }
+
+    videoList.innerHTML = videos.map((v,i) => `
+      <div class="video-item ${i === currentVideoIndex ? 'active' : ''}" data-index="${i}">
+        <div class="video-thumbnail"><i class="fas fa-film"></i></div>
+        <div class="video-item-info">
+          <div class="video-item-title">${escapeHtml(v.name)}</div>
+          <div class="video-item-meta">
+            <span><i class="fas fa-hdd"></i> ${escapeHtml(v.size||'--')}</span>
+            <span><i class="fas fa-file"></i> ${escapeHtml((v.type||'--').toUpperCase())}</span>
+          </div>
+        </div>
+        <div class="play-icon"><i class="fas fa-play"></i></div>
+      </div>`).join('');
+
+    videoList.querySelectorAll('.video-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const index = parseInt(item.dataset.index, 10);
+        loadVideo(index);
+      });
+    });
+  }
+
+  function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  // ========== External URL ==========
+  loadExternalBtn.addEventListener('click', () => {
+    const url = externalUrlInput.value.trim();
+    if (!url) {
+      logEvent('Please enter a video URL', 'warning');
+      return;
+    }
+    loadExternalVideo(url);
+  });
+
+  externalUrlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') loadExternalBtn.click();
+  });
+
+  function loadExternalVideo(url) {
+    sendControlMessage('load', { url: url, time: 0 });
+    currentVideoIndex = -1;
+    renderVideoList();
+    videoTitle.textContent = 'External Video';
+    videoFormat.innerHTML = `<i class="fas fa-file-video"></i> External`;
+    checkFormatSupport(url);
+  }
+
+  // ========== Video Loading ==========
+  function checkFormatSupport(url) {
+    const parts = url.split('?')[0].split('.');
+    const ext = parts.length ? parts.pop().toLowerCase() : '';
+    if (problematicFormats.includes(ext)) {
+      formatWarning.classList.remove('hidden');
+      return false;
+    } else {
+      formatWarning.classList.add('hidden');
+      return true;
+    }
+  }
+
+  function showError(title, message, canRetry = true) {
+    errorTitle.textContent = title;
+    errorMessage.textContent = message;
+    errorOverlay.classList.remove('hidden');
+    loadingOverlay.classList.add('hidden');
+    errorRetryBtn.style.display = canRetry ? 'inline-flex' : 'none';
+  }
+
+  function hideError() {
+    errorOverlay.classList.add('hidden');
+  }
+
+  function retryLoadVideo() {
+    if (retryCount < maxRetries && lastVideoUrl) {
+      retryCount++;
+      hideError();
+      loadingText.textContent = `Retry ${retryCount}/${maxRetries}...`;
+      loadingOverlay.classList.remove('hidden');
+      setTimeout(() => {
+        player.src = lastVideoUrl;
+        player.currentTime = lastVideoTime || 0;
+        player.load();
+        safePlay();
+      }, 1000);
+    } else {
+      showError('Load Failed', 'Could not load video after multiple attempts. Check your connection or try a different video.', false);
+    }
+  }
+
+  errorRetryBtn.addEventListener('click', retryLoadVideo);
+
+  function updateBufferProgress() {
+    try {
+      if (player.buffered.length > 0 && player.duration) {
+        const bufferedEnd = player.buffered.end(player.buffered.length - 1);
+        const percentage = (bufferedEnd / player.duration) * 100;
+        bufferProgressBar.style.width = percentage + '%';
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  function safePlay() {
+    const promise = player.play();
+    if (promise !== undefined) {
+      promise.then(() => updatePlayButton(true)).catch(err => {
+        updatePlayButton(false);
+        console.log('Autoplay blocked or play failed:', err && err.name ? err.name : err);
+        if (err && err.name === 'NotAllowedError') {
+          loadingSubtext.textContent = 'Click Play to start';
+          loadingOverlay.classList.remove('hidden');
+        }
+      });
+    }
+  }
+
+  function loadVideo(index) {
+    if (index < 0 || index >= videos.length) return;
+    currentVideoIndex = index;
+    const video = videos[index];
+    retryCount = 0;
+    lastVideoUrl = video.url;
+    lastVideoTime = 0;
+
+    // Send load message to server
+    sendControlMessage('load', { url: video.url, time: 0 });
+
+    // Local load
+    player.src = video.url;
+    videoTitle.textContent = video.name || 'Video';
+    videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${video.type ? video.type.toUpperCase() : '--'}`;
+    checkFormatSupport(video.url);
+    renderVideoList();
+    loadingText.textContent = 'Loading...';
+    loadingSubtext.textContent = '';
+    loadingOverlay.classList.remove('hidden');
+    hideError();
+    safePlay();
+  }
+
+  // ========== WebSocket Connection ==========
+  function connect(roomKey, nickname) {
+    if (ws) {
+      ws.close();
+    }
+
+    currentRoom = roomKey;
+    myNickname = nickname || `User_${Math.random().toString(36).substr(2, 4)}`;
+
+    setStatus('connecting', 'Connecting...');
+    logEvent(`Connecting to room: ${roomKey}...`, 'info');
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch(err) {
+      setStatus('error', 'Connection failed');
+      logEvent('Failed to create WebSocket', 'error');
+      return;
+    }
+
+    ws.onopen = () => {
+      reconnectAttempts = 0;
+      ws.send(JSON.stringify({ key: roomKey, nickname: myNickname }));
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleWebSocketMessage(msg);
+      } catch(err) {
+        console.warn('Invalid WS message', err);
+      }
+    };
+
+    ws.onclose = () => {
+      setStatus('error', 'Disconnected');
+      syncStatus.style.display = 'none';
+      logEvent('Disconnected from server', 'warning');
+      scheduleReconnect();
+    };
+
+    ws.onerror = (ev) => {
+      setStatus('error', 'Connection error');
+      logEvent('WebSocket error', 'error');
+    };
+  }
+
+  function scheduleReconnect() {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      logEvent('Max reconnection attempts reached', 'error');
+      return;
+    }
+    reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+    logEvent(`Reconnecting in ${delay/1000}s... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+    reconnectTimer = setTimeout(() => {
+      if (currentRoom) {
+        connect(currentRoom, myNickname);
+      }
+    }, delay);
+  }
+
+  function handleWebSocketMessage(msg) {
+    if (!msg || !msg.type) return;
+
+    switch (msg.type) {
+      case 'welcome':
+        handleWelcome(msg);
+        break;
+      case 'state_update':
+        handleStateUpdate(msg);
+        break;
+      case 'sync':
+        handleSync(msg);
+        break;
+      case 'control_rejected':
+        handleControlRejected(msg);
+        break;
+      case 'participant_joined':
+        handleParticipantJoined(msg);
+        break;
+      case 'participant_left':
+        handleParticipantLeft(msg);
+        break;
+      case 'pong':
+        // Keepalive response, ignore
+        break;
+      default:
+        console.log('Unknown message type:', msg.type);
+    }
+  }
+
+  function handleWelcome(msg) {
+    myUserId = msg.user_id;
+
+    // Show main UI
+    joinOverlay.classList.add('hidden');
+    mainHeader.style.display = 'flex';
+    mainContent.style.display = 'flex';
+
+    roomKeyDisplay.textContent = currentRoom;
+    userDisplay.innerHTML = `${escapeHtml(myNickname)} <span style="color:var(--text-muted);font-size:0.75rem;">(${myUserId})</span>`;
+
+    setStatus('connected', 'Connected');
+    logEvent(`Joined as ${myUserId}`, 'success');
+
+    // Initialize participants
+    participants.clear();
+    participants.set(myUserId, { nickname: myNickname, isSelf: true });
+    if (msg.participants) {
+      msg.participants.forEach(p => {
+        participants.set(p.user_id, { nickname: p.nickname, isSelf: false });
+      });
+    }
+    renderParticipants();
+
+    // Apply initial state if available
+    if (msg.state && msg.state.video) {
+      applyServerState(msg.state);
+    }
+  }
+
+  function handleStateUpdate(msg) {
+    if (!msg.state) return;
+    applyServerState(msg.state);
+
+    const actor = msg.state.last_actor;
+    const actorName = getParticipantName(actor);
+    const action = msg.state.state === 'playing' ? 'played' : msg.state.state === 'paused' ? 'paused' : 'updated';
+    logEvent(`${actorName} ${action} video`, 'info');
+  }
+
+  function handleSync(msg) {
+    if (!msg.time !== undefined) return;
+
+    const serverTime = msg.time;
+    const localTime = player.currentTime || 0;
+    const drift = Math.abs(localTime - serverTime);
+
+    if (drift > 1.0 && !isDragging && !isBuffering) {
+      // Hard seek for large drift - only if not dragging or buffering
+      logEvent(`Large drift detected (${drift.toFixed(2)}s), syncing...`, 'warning');
+      player.currentTime = serverTime;
+      driftIndicator.textContent = 'syncing...';
+      driftIndicator.classList.add('syncing');
+      setTimeout(() => {
+        driftIndicator.textContent = '';
+        driftIndicator.classList.remove('syncing');
+      }, 2000);
+    } else if (drift > 0.5) {
+      // Adjust playback rate for small drift
+      const rate = localTime < serverTime ? 1.1 : 0.9;
+      player.playbackRate = rate;
+      driftIndicator.textContent = `syncing ${rate}x`;
+      driftIndicator.classList.add('syncing');
+      setTimeout(() => {
+        player.playbackRate = 1.0;
+        driftIndicator.textContent = '';
+        driftIndicator.classList.remove('syncing');
+      }, 3000);
+    }
+
+    // Sync play/pause state
+    const shouldPlay = msg.state === 'playing';
+    if (shouldPlay && player.paused) {
+      safePlay();
+    } else if (!shouldPlay && !player.paused) {
+      player.pause();
+    }
+  }
+
+  function handleControlRejected(msg) {
+    logEvent(`Control rejected: ${msg.reason}`, 'warning');
+    // Request current state to resync
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'request_sync' }));
+    }
+  }
+
+  function handleParticipantJoined(msg) {
+    participants.set(msg.user_id, { nickname: msg.nickname, isSelf: false });
+    renderParticipants();
+    logEvent(`${escapeHtml(msg.nickname)} joined`, 'success');
+  }
+
+  function handleParticipantLeft(msg) {
+    const p = participants.get(msg.user_id);
+    participants.delete(msg.user_id);
+    renderParticipants();
+    if (p) {
+      logEvent(`${escapeHtml(p.nickname)} left`, 'warning');
+    }
+  }
+
+  function applyServerState(state) {
+    if (!state) return;
+
+    // Update video if different
+    if (state.video && player.src !== state.video && state.video !== window.location.href) {
+      const videoIndex = videos.findIndex(v => v.url === state.video);
+      if (videoIndex !== -1) {
+        currentVideoIndex = videoIndex;
+        const video = videos[videoIndex];
+        videoTitle.textContent = video.name;
+        videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${video.type.toUpperCase()}`;
+        renderVideoList();
+      } else {
+        videoTitle.textContent = 'External Video';
+        videoFormat.innerHTML = `<i class="fas fa-file-video"></i> External`;
+      }
+      player.src = state.video;
+      checkFormatSupport(state.video);
+    }
+
+    // Update time - only if not dragging or buffering
+    const serverTime = state.time || 0;
+    const localTime = player.currentTime || 0;
+    const diff = Math.abs(localTime - serverTime);
+
+    if (diff > 0.5 && !isDragging && !isBuffering) {
+      player.currentTime = serverTime;
+    }
+
+    // Update play/pause state
+    const isPlaying = state.state === 'playing';
+    if (isPlaying && player.paused) {
+      safePlay();
+    } else if (!isPlaying && !player.paused) {
+      player.pause();
+    }
+  }
+
+  function sendControlMessage(type, data) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      logEvent('Not connected to server', 'error');
+      return;
+    }
+
+    const message = {
+      type: type,
+      timestamp: Date.now(),
+      user_id: myUserId,
+      ...data
+    };
+
+    ws.send(JSON.stringify(message));
+  }
+
+  // ========== Participant List ==========
+  function renderParticipants() {
+    if (participants.size === 0) {
+      participantsList.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-users"></i>
+          <p>No participants</p>
+        </div>`;
+      return;
+    }
+
+    const html = [];
+    participants.forEach((info, userId) => {
+      const initials = info.nickname.substring(0, 2).toUpperCase();
+      const isSelf = info.isSelf;
+      html.push(`
+        <div class="participant-item">
+          <div class="participant-avatar ${isSelf ? 'you' : ''}">${initials}</div>
+          <div class="participant-info">
+            <div class="participant-name">${escapeHtml(info.nickname)}${isSelf ? ' <span class="you-badge">(You)</span>' : ''}</div>
+            <div class="participant-id">${userId}</div>
+          </div>
+        </div>
+      `);
+    });
+
+    participantsList.innerHTML = html.join('');
+  }
+
+  function getParticipantName(userId) {
+    const p = participants.get(userId);
+    return p ? p.nickname : userId;
+  }
+
+  // ========== Event Log ==========
+  function logEvent(message, type = 'default') {
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.innerHTML = `<span class="log-time">${time}</span><span class="log-message">${escapeHtml(message)}</span>`;
+    eventLog.insertBefore(entry, eventLog.firstChild);
+
+    // Keep only last 100 entries
+    while (eventLog.children.length > 100) {
+      eventLog.removeChild(eventLog.lastChild);
+    }
+  }
+
+  // ========== Status ==========
+  function setStatus(status, text) {
+    statusDot.className = 'status-dot ' + status;
+    statusText.textContent = text;
+  }
+
+  // ========== UI Helpers ==========
+  function formatTime(seconds) {
+    if (isNaN(seconds)) return '00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+    }
+    return `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+  }
+
+  function updatePlayButton(isPlaying) {
+    playBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    if (isPlaying) videoContainer.classList.remove('paused');
+    else videoContainer.classList.add('paused');
+  }
+
+  function updateVolumeUI() {
+    const percentage = player.volume * 100;
+    volumeLevel.style.width = percentage + '%';
+
+    if (player.volume === 0 || player.muted) {
+      muteBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+    } else if (player.volume < 0.5) {
+      muteBtn.innerHTML = '<i class="fas fa-volume-down"></i>';
+    } else {
+      muteBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+    }
+  }
+
+  function updateProgress() {
+    if (isDragging) return;
+    const current = player.currentTime || 0;
+    const duration = player.duration || 0;
+    const percentage = duration ? (current / duration) * 100 : 0;
+    progressBar.style.width = percentage + '%';
+    timeDisplay.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+    updateBufferProgress();
+  }
+
+  function seekTo(clientX) {
+    const rect = progressContainer.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const duration = player.duration || 0;
+    const newTime = percentage * duration;
+    
+    // Only update UI during drag, actual seek happens on mouseup
+    progressBar.style.width = (percentage * 100) + '%';
+    timeDisplay.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+    
+    // Do NOT seek during drag - only update UI
+    if (!isDragging) {
+      // Only seek if not buffering
+      if (!isBuffering && player.readyState >= 2) {
+        player.currentTime = newTime;
+      }
+    }
+    
+    return newTime;
+  }
+
+  // ========== Player Events ==========
+  player.addEventListener('play', () => {
+    updatePlayButton(true);
+    if (!isSyncing) {
+      sendControlMessage('play', { time: player.currentTime });
+    }
+  });
+
+  player.addEventListener('pause', () => {
+    updatePlayButton(false);
+    if (!isSyncing) {
+      sendControlMessage('pause', { time: player.currentTime });
+    }
+  });
+
+  player.addEventListener('timeupdate', updateProgress);
+  player.addEventListener('progress', updateBufferProgress);
+  player.addEventListener('loadedmetadata', () => {
+    loadingOverlay.classList.add('hidden');
+    timeDisplay.textContent = `00:00 / ${formatTime(player.duration)}`;
+  });
+  player.addEventListener('waiting', () => {
+    isBuffering = true;
+    bufferingStartTime = Date.now();
+    loadingText.textContent = 'Buffering...';
+    loadingSubtext.textContent = 'Loading video';
+    loadingOverlay.classList.remove('hidden');
+    
+    // Set timer to reset playback if buffering takes too long
+    bufferingTimer = setTimeout(() => {
+      if (isBuffering) {
+        resetPlaybackOnBufferingFailure();
+      }
+    }, MAX_BUFFERING_TIME);
+  });
+  player.addEventListener('playing', () => {
+    isBuffering = false;
+    if (bufferingTimer) {
+      clearTimeout(bufferingTimer);
+      bufferingTimer = null;
+    }
+    loadingOverlay.classList.add('hidden');
+    retryCount = 0;
+  });
+  player.addEventListener('stalled', () => {
+    isBuffering = true;
+    bufferingStartTime = Date.now();
+    loadingText.textContent = 'Connection stalled...';
+    loadingSubtext.textContent = 'Waiting for network';
+    loadingOverlay.classList.remove('hidden');
+    
+    bufferingTimer = setTimeout(() => {
+      if (isBuffering) {
+        resetPlaybackOnBufferingFailure();
+      }
+    }, MAX_BUFFERING_TIME);
+  });
+  player.addEventListener('canplay', () => {
+    isBuffering = false;
+    if (bufferingTimer) {
+      clearTimeout(bufferingTimer);
+      bufferingTimer = null;
+    }
+    loadingOverlay.classList.add('hidden');
+  });
+  
+  function resetPlaybackOnBufferingFailure() {
+    logEvent('Buffering timed out, resetting playback...', 'warning');
+    const currentTime = player.currentTime || 0;
+    const wasPlaying = !player.paused;
+    
+    // Reset playback
+    player.pause();
+    player.currentTime = currentTime;
+    if (wasPlaying) {
+      safePlay();
+    }
+  }
+  player.addEventListener('error', () => {
+    loadingOverlay.classList.add('hidden');
+    let errorMsg = 'Unknown error';
+    let canRetry = true;
+    if (player.error) {
+      switch(player.error.code) {
+        case 1: errorMsg = 'Video loading aborted'; break;
+        case 2: errorMsg = 'Network error. Check your connection'; break;
+        case 3: errorMsg = 'Video decoding error. Format may not be supported'; canRetry = false; break;
+        case 4: errorMsg = 'Video format not supported'; canRetry = false; break;
+      }
+    }
+    console.error('Video error:', errorMsg, player.error);
+    showError('Playback Error', errorMsg, canRetry);
+  });
+  player.addEventListener('loadeddata', () => {
+    if (player.videoWidth && player.videoHeight) {
+      videoResolution.innerHTML = `<i class="fas fa-tv"></i> ${player.videoWidth}x${player.videoHeight}`;
+    }
+  });
+
+  // ========== Control Handlers ==========
+  playBtn.addEventListener('click', () => {
+    if (player.paused) safePlay();
+    else player.pause();
+  });
+
+  prevBtn.addEventListener('click', () => {
+    if (currentVideoIndex > 0) loadVideo(currentVideoIndex - 1);
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (currentVideoIndex < videos.length - 1) loadVideo(currentVideoIndex + 1);
+  });
+
+  muteBtn.addEventListener('click', () => {
+    if (player.volume === 0) player.volume = lastVolume || 0.7;
+    else { lastVolume = player.volume; player.volume = 0; }
+    updateVolumeUI();
+  });
+
+  volumeSlider.addEventListener('click', (e) => {
+    const rect = volumeSlider.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    player.volume = percentage;
+    updateVolumeUI();
+  });
+
+  fullscreenBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      videoContainer.requestFullscreen();
+    }
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
+    else fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+  });
+
+  syncBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'request_sync' }));
+      syncBtn.style.transform = 'rotate(360deg)';
+      setTimeout(() => syncBtn.style.transform = '', 300);
+      logEvent('Requested sync from server', 'info');
+    }
+  });
+
+  // ========== Progress Interactions ==========
+  progressContainer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    wasPlayingBeforeDrag = !player.paused;
+    if (wasPlayingBeforeDrag) player.pause();
+    const rect = progressContainer.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const duration = player.duration || 0;
+    const newTime = percentage * duration;
+    progressBar.style.width = (percentage * 100) + '%';
+    timeDisplay.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+    progressContainer.classList.add('dragging');
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    const rect = progressContainer.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const duration = player.duration || 0;
+    const time = percentage * duration;
+    progressTooltip.textContent = formatTime(time);
+    progressTooltip.style.left = (percentage * 100) + '%';
+    if (isDragging) {
+      // Only update UI during drag
+      progressBar.style.width = (percentage * 100) + '%';
+      timeDisplay.textContent = `${formatTime(time)} / ${formatTime(duration)}`;
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      progressContainer.classList.remove('dragging');
+      
+      // Calculate final seek position
+      const rect = progressContainer.getBoundingClientRect();
+      const percentage = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      const duration = player.duration || 0;
+      const finalTime = percentage * duration;
+      
+      // Only seek if not buffering
+      if (!isBuffering && player.readyState >= 2) {
+        player.currentTime = finalTime;
+        sendControlMessage('seek', { time: finalTime });
+      }
+      
+      if (wasPlayingBeforeDrag) safePlay();
+    }
+  });
+
+  // Touch support for mobile
+  progressContainer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    isDragging = true;
+    wasPlayingBeforeDrag = !player.paused;
+    if (wasPlayingBeforeDrag) player.pause();
+    const touch = e.touches[0];
+    const rect = progressContainer.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const duration = player.duration || 0;
+    const newTime = percentage * duration;
+    progressBar.style.width = (percentage * 100) + '%';
+    timeDisplay.textContent = `${formatTime(newTime)} / ${formatTime(duration)}`;
+    progressContainer.classList.add('dragging');
+  });
+
+  document.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = progressContainer.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const duration = player.duration || 0;
+    const time = percentage * duration;
+    progressTooltip.textContent = formatTime(time);
+    progressTooltip.style.left = (percentage * 100) + '%';
+    if (isDragging) {
+      // Only update UI during drag
+      progressBar.style.width = (percentage * 100) + '%';
+      timeDisplay.textContent = `${formatTime(time)} / ${formatTime(duration)}`;
+    }
+  });
+
+  document.addEventListener('touchend', (e) => {
+    if (isDragging) {
+      isDragging = false;
+      progressContainer.classList.remove('dragging');
+      
+      // Calculate final seek position
+      const touch = e.changedTouches[0];
+      const rect = progressContainer.getBoundingClientRect();
+      const percentage = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+      const duration = player.duration || 0;
+      const finalTime = percentage * duration;
+      
+      // Only seek if not buffering
+      if (!isBuffering && player.readyState >= 2) {
+        player.currentTime = finalTime;
+        sendControlMessage('seek', { time: finalTime });
+      }
+      
+      if (wasPlayingBeforeDrag) safePlay();
+    }
+  });
+
+  // Improved fullscreen support for mobile
+  fullscreenBtn.addEventListener('click', () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    } else {
+      const elem = videoContainer;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
+    }
+  });
+
+  // Cross-browser fullscreen change event
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+  document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+  document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+
+  function updateFullscreenButton() {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+    fullscreenBtn.innerHTML = isFullscreen ? '<i class="fas fa-compress"></i>' : '<i class="fas fa-expand"></i>';
+  }
+
+  // ========== Keyboard Shortcuts ==========
+  document.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+    switch (e.code) {
+      case 'Space':
+        e.preventDefault();
+        if (player.paused) safePlay();
+        else player.pause();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        if (!isBuffering && player.readyState >= 2) {
+          player.currentTime = Math.max(0, (player.currentTime || 0) - 5);
+          sendControlMessage('seek', { time: player.currentTime });
+        }
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        if (!isBuffering && player.readyState >= 2) {
+          player.currentTime = Math.min(player.duration || 0, (player.currentTime || 0) + 5);
+          sendControlMessage('seek', { time: player.currentTime });
+        }
+        break;
+      case 'KeyF':
+        e.preventDefault();
+        fullscreenBtn.click();
+        break;
+      case 'KeyM':
+        e.preventDefault();
+        muteBtn.click();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        player.volume = Math.min(1, player.volume + 0.1);
+        updateVolumeUI();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        player.volume = Math.max(0, player.volume - 0.1);
+        updateVolumeUI();
+        break;
+    }
+  });
+
+  // ========== Cleanup ==========
+  window.addEventListener('beforeunload', () => {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (ws) ws.close();
+  });
+
+})();
+</script>
+</body>
+</html>
