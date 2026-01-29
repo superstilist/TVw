@@ -106,6 +106,7 @@
   .sidebar-title { font-size: 1.125rem; font-weight:600; display:flex; align-items:center; gap:10px; }
   .sidebar-title i { color: var(--accent-primary); }
   .badge { background: var(--accent-gradient); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .sidebar-actions { display: flex; gap: 8px; }
 
   /* Tabs */
   .sidebar-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -118,6 +119,7 @@
   .sidebar-content::-webkit-scrollbar-track { background: transparent; }
   .sidebar-content::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
   .sidebar-content::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  .refresh-btn { margin-left: auto; padding: 6px 12px; font-size: 0.875rem; }
 
   .tab-panel { display: none; padding: 16px; }
   .tab-panel.active { display: block; }
@@ -380,6 +382,12 @@
       <div class="sidebar-content">
         <!-- Videos Tab -->
         <div class="tab-panel active" id="videosPanel">
+          <div class="sidebar-actions" style="padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <button class="btn btn-sm btn-secondary" id="refreshVideoListBtn">
+              <i class="fas fa-sync-alt"></i>
+              <span>Refresh List</span>
+            </button>
+          </div>
           <div class="video-list-section">
             <div class="section-title">Available Videos</div>
             <div id="videoList">
@@ -477,6 +485,7 @@
   const videoFormat = document.getElementById('videoFormat');
   const syncStatus = document.getElementById('syncStatus');
   const videoList = document.getElementById('videoList');
+  const refreshVideoListBtn = document.getElementById('refreshVideoListBtn');
   const externalUrlInput = document.getElementById('externalUrlInput');
   const loadExternalBtn = document.getElementById('loadExternalBtn');
   const participantsList = document.getElementById('participantsList');
@@ -494,7 +503,10 @@
   let myUserId = null;
   let myNickname = null;
   let videos = [];
+  let series = [];
   let currentVideoIndex = -1;
+  let currentSeries = null;
+  let currentEpisodeIndex = -1;
   let isDragging = false;
   let wasPlayingBeforeDrag = false;
   let lastVolume = 0.7;
@@ -557,6 +569,7 @@
       if (!response.ok) throw new Error('Network response not ok');
       const data = await response.json();
       videos = data.videos || [];
+      series = data.series || [];
       renderVideoList();
     } catch (err) {
       console.error('Failed to load videos:', err);
@@ -570,30 +583,120 @@
   }
 
   function renderVideoList() {
-    if (videos.length === 0) {
-      videoList.innerHTML = `
+    let html = '';
+
+    // Render series
+    if (series.length > 0) {
+      html += `
+        <div class="video-list-section">
+          <div class="section-title">Series</div>
+      `;
+
+      series.forEach((s, seriesIndex) => {
+        const isActive = currentSeries === s.path;
+        html += `
+          <div class="video-item ${isActive ? 'active' : ''} series-item" data-series="${seriesIndex}">
+            <div class="video-thumbnail"><i class="fas fa-folder-open"></i></div>
+            <div class="video-item-info">
+              <div class="video-item-title">${escapeHtml(s.name)}</div>
+              <div class="video-item-meta">
+                <span><i class="fas fa-play-circle"></i> ${s.episodes.length} episodes</span>
+              </div>
+            </div>
+            <div class="play-icon"><i class="fas fa-chevron-down"></i></div>
+          </div>
+        `;
+
+        // Render episodes if series is active
+        if (isActive) {
+          s.episodes.forEach((ep, epIndex) => {
+            const isEpisodeActive = currentEpisodeIndex === epIndex;
+            html += `
+              <div class="video-item episode-item ${isEpisodeActive ? 'active' : ''}" data-series="${seriesIndex}" data-episode="${epIndex}" style="margin-left: 24px;">
+                <div class="video-thumbnail"><i class="fas fa-play-circle"></i></div>
+                <div class="video-item-info">
+                  <div class="video-item-title">Episode ${epIndex + 1}: ${escapeHtml(ep.name)}</div>
+                  <div class="video-item-meta">
+                    <span><i class="fas fa-hdd"></i> ${escapeHtml(ep.size||'--')}</span>
+                    <span><i class="fas fa-file"></i> ${escapeHtml((ep.type||'--').toUpperCase())}</span>
+                  </div>
+                </div>
+                <div class="play-icon"><i class="fas fa-play"></i></div>
+              </div>
+            `;
+          });
+        }
+      });
+
+      html += `</div>`;
+    }
+
+    // Render standalone videos
+    if (videos.length > 0) {
+      html += `
+        <div class="video-list-section">
+          <div class="section-title">Standalone Videos</div>
+      `;
+
+      videos.forEach((v, i) => {
+        const isActive = currentVideoIndex === i && currentSeries === null;
+        html += `
+          <div class="video-item ${isActive ? 'active' : ''}" data-index="${i}">
+            <div class="video-thumbnail"><i class="fas fa-film"></i></div>
+            <div class="video-item-info">
+              <div class="video-item-title">${escapeHtml(v.name)}</div>
+              <div class="video-item-meta">
+                <span><i class="fas fa-hdd"></i> ${escapeHtml(v.size||'--')}</span>
+                <span><i class="fas fa-file"></i> ${escapeHtml((v.type||'--').toUpperCase())}</span>
+              </div>
+            </div>
+            <div class="play-icon"><i class="fas fa-play"></i></div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+    }
+
+    if (videos.length === 0 && series.length === 0) {
+      html = `
         <div class="empty-state">
           <i class="fas fa-film"></i>
           <p>No videos available</p>
           <p style="font-size:0.8125rem; margin-top:8px;">Add videos to static/videos folder</p>
         </div>`;
-      return;
     }
 
-    videoList.innerHTML = videos.map((v,i) => `
-      <div class="video-item ${i === currentVideoIndex ? 'active' : ''}" data-index="${i}">
-        <div class="video-thumbnail"><i class="fas fa-film"></i></div>
-        <div class="video-item-info">
-          <div class="video-item-title">${escapeHtml(v.name)}</div>
-          <div class="video-item-meta">
-            <span><i class="fas fa-hdd"></i> ${escapeHtml(v.size||'--')}</span>
-            <span><i class="fas fa-file"></i> ${escapeHtml((v.type||'--').toUpperCase())}</span>
-          </div>
-        </div>
-        <div class="play-icon"><i class="fas fa-play"></i></div>
-      </div>`).join('');
+    videoList.innerHTML = html;
 
-    videoList.querySelectorAll('.video-item').forEach(item => {
+    // Add event listeners
+    videoList.querySelectorAll('.series-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const seriesIndex = parseInt(item.dataset.series, 10);
+        const s = series[seriesIndex];
+        if (currentSeries === s.path) {
+          // Collapse series
+          currentSeries = null;
+          currentEpisodeIndex = -1;
+        } else {
+          // Expand series
+          currentSeries = s.path;
+          currentEpisodeIndex = -1;
+          currentVideoIndex = -1;
+        }
+        renderVideoList();
+      });
+    });
+
+    videoList.querySelectorAll('.episode-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const seriesIndex = parseInt(item.dataset.series, 10);
+        const episodeIndex = parseInt(item.dataset.episode, 10);
+        loadEpisode(seriesIndex, episodeIndex);
+      });
+    });
+
+    videoList.querySelectorAll('.video-item:not(.series-item):not(.episode-item)').forEach(item => {
       item.addEventListener('click', () => {
         const index = parseInt(item.dataset.index, 10);
         loadVideo(index);
@@ -601,11 +704,50 @@
     });
   }
 
+  function loadEpisode(seriesIndex, episodeIndex) {
+    if (seriesIndex < 0 || seriesIndex >= series.length) return;
+    if (episodeIndex < 0 || episodeIndex >= series[seriesIndex].episodes.length) return;
+
+    currentSeries = series[seriesIndex].path;
+    currentEpisodeIndex = episodeIndex;
+    currentVideoIndex = -1;
+
+    const episode = series[seriesIndex].episodes[episodeIndex];
+    retryCount = 0;
+    lastVideoUrl = episode.url;
+    lastVideoTime = 0;
+
+    // Send load message to server
+    sendControlMessage('load', { url: episode.url, time: 0 });
+
+    // Local load
+    player.src = episode.url;
+    videoTitle.textContent = `Episode ${episodeIndex + 1}: ${episode.name}`;
+    videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${episode.type ? episode.type.toUpperCase() : '--'}`;
+    checkFormatSupport(episode.url);
+    renderVideoList();
+    loadingText.textContent = 'Loading...';
+    loadingSubtext.textContent = '';
+    loadingOverlay.classList.remove('hidden');
+    hideError();
+    safePlay();
+  }
+
   function escapeHtml(text) {
     const d = document.createElement('div');
     d.textContent = text;
     return d.innerHTML;
   }
+
+  // ========== Refresh Video List ==========
+  refreshVideoListBtn.addEventListener('click', () => {
+    refreshVideoListBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Refreshing...</span>';
+    loadVideos().finally(() => {
+      setTimeout(() => {
+        refreshVideoListBtn.innerHTML = '<i class="fas fa-sync-alt"></i><span>Refresh List</span>';
+      }, 500);
+    });
+  });
 
   // ========== External URL ==========
   loadExternalBtn.addEventListener('click', () => {
@@ -855,14 +997,19 @@
   }
 
   function handleSync(msg) {
-    if (!msg.time !== undefined) return;
+    if (msg.time === undefined) return;
 
     const serverTime = msg.time;
     const localTime = player.currentTime || 0;
     const drift = Math.abs(localTime - serverTime);
 
-    if (drift > 1.0 && !isDragging && !isBuffering) {
-      // Hard seek for large drift - only if not dragging or buffering
+    // Don't sync during buffering, dragging, or if video is not loaded
+    if (isBuffering || isDragging || player.readyState < 2) {
+      return;
+    }
+
+    if (drift > 1.0) {
+      // Hard seek for large drift
       logEvent(`Large drift detected (${drift.toFixed(2)}s), syncing...`, 'warning');
       player.currentTime = serverTime;
       driftIndicator.textContent = 'syncing...';
@@ -871,24 +1018,26 @@
         driftIndicator.textContent = '';
         driftIndicator.classList.remove('syncing');
       }, 2000);
-    } else if (drift > 0.5) {
-      // Adjust playback rate for small drift
-      const rate = localTime < serverTime ? 1.1 : 0.9;
+    } else if (drift > 0.3) {
+      // Adjust playback rate for small drift (reduced threshold for smoother sync)
+      const rate = localTime < serverTime ? 1.05 : 0.95;
       player.playbackRate = rate;
-      driftIndicator.textContent = `syncing ${rate}x`;
+      driftIndicator.textContent = `syncing ${rate.toFixed(2)}x`;
       driftIndicator.classList.add('syncing');
       setTimeout(() => {
         player.playbackRate = 1.0;
         driftIndicator.textContent = '';
         driftIndicator.classList.remove('syncing');
-      }, 3000);
+      }, 2000); // Reduced time for faster correction
     }
 
-    // Sync play/pause state
+    // Sync play/pause state - but respect buffering state
     const shouldPlay = msg.state === 'playing';
-    if (shouldPlay && player.paused) {
+    const isCurrentlyPlaying = !player.paused;
+
+    if (shouldPlay && !isCurrentlyPlaying && !isBuffering) {
       safePlay();
-    } else if (!shouldPlay && !player.paused) {
+    } else if (!shouldPlay && isCurrentlyPlaying) {
       player.pause();
     }
   }
@@ -921,17 +1070,41 @@
 
     // Update video if different
     if (state.video && player.src !== state.video && state.video !== window.location.href) {
-      const videoIndex = videos.findIndex(v => v.url === state.video);
-      if (videoIndex !== -1) {
-        currentVideoIndex = videoIndex;
-        const video = videos[videoIndex];
-        videoTitle.textContent = video.name;
-        videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${video.type.toUpperCase()}`;
-        renderVideoList();
-      } else {
-        videoTitle.textContent = 'External Video';
-        videoFormat.innerHTML = `<i class="fas fa-file-video"></i> External`;
+      let found = false;
+
+      // Check if it's an episode from a series
+      for (let sIndex = 0; sIndex < series.length; sIndex++) {
+        const s = series[sIndex];
+        const episodeIndex = s.episodes.findIndex(ep => ep.url === state.video);
+        if (episodeIndex !== -1) {
+          currentSeries = s.path;
+          currentEpisodeIndex = episodeIndex;
+          currentVideoIndex = -1;
+          videoTitle.textContent = `Episode ${episodeIndex + 1}: ${s.episodes[episodeIndex].name}`;
+          videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${s.episodes[episodeIndex].type.toUpperCase()}`;
+          renderVideoList();
+          found = true;
+          break;
+        }
       }
+
+      // Check if it's a standalone video
+      if (!found) {
+        const videoIndex = videos.findIndex(v => v.url === state.video);
+        if (videoIndex !== -1) {
+          currentVideoIndex = videoIndex;
+          currentSeries = null;
+          currentEpisodeIndex = -1;
+          const video = videos[videoIndex];
+          videoTitle.textContent = video.name;
+          videoFormat.innerHTML = `<i class="fas fa-file-video"></i> ${video.type.toUpperCase()}`;
+          renderVideoList();
+        } else {
+          videoTitle.textContent = 'External Video';
+          videoFormat.innerHTML = `<i class="fas fa-file-video"></i> External`;
+        }
+      }
+
       player.src = state.video;
       checkFormatSupport(state.video);
     }
@@ -1192,11 +1365,40 @@
   });
 
   prevBtn.addEventListener('click', () => {
-    if (currentVideoIndex > 0) loadVideo(currentVideoIndex - 1);
+    if (currentSeries) {
+      // If in a series, go to previous episode
+      if (currentEpisodeIndex > 0) {
+        loadEpisode(series.findIndex(s => s.path === currentSeries), currentEpisodeIndex - 1);
+      } else {
+        // If first episode, go to last episode of previous series
+        const seriesIndex = series.findIndex(s => s.path === currentSeries);
+        if (seriesIndex > 0) {
+          const prevSeries = series[seriesIndex - 1];
+          loadEpisode(seriesIndex - 1, prevSeries.episodes.length - 1);
+        }
+      }
+    } else {
+      // If in standalone videos, go to previous video
+      if (currentVideoIndex > 0) loadVideo(currentVideoIndex - 1);
+    }
   });
 
   nextBtn.addEventListener('click', () => {
-    if (currentVideoIndex < videos.length - 1) loadVideo(currentVideoIndex + 1);
+    if (currentSeries) {
+      // If in a series, go to next episode
+      const seriesIndex = series.findIndex(s => s.path === currentSeries);
+      if (currentEpisodeIndex < series[seriesIndex].episodes.length - 1) {
+        loadEpisode(seriesIndex, currentEpisodeIndex + 1);
+      } else {
+        // If last episode, go to first episode of next series
+        if (seriesIndex < series.length - 1) {
+          loadEpisode(seriesIndex + 1, 0);
+        }
+      }
+    } else {
+      // If in standalone videos, go to next video
+      if (currentVideoIndex < videos.length - 1) loadVideo(currentVideoIndex + 1);
+    }
   });
 
   muteBtn.addEventListener('click', () => {

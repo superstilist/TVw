@@ -18,8 +18,14 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
+import gzip
+import json
 
 app = FastAPI()
+
+# Add compression middleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Статика на /static, а відео на /video
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -34,37 +40,82 @@ def root_redirect():
 def admin_redirect():
     return RedirectResponse(url="/static/admin.html")
 
-# API для отримання списку відео
+# API для отримання списку відео та серій
 @app.get("/api/videos")
 def get_videos():
-    """Повертає список доступних відео файлів з папки static/videos."""
+    """Повертає список доступних відео файлів та серій з папки static/videos."""
     videos_dir = "static/videos"
     allowed_extensions = {'.mp4', '.webm', '.ogg', '.mkv', '.mov'}
-    videos = []
+    result = {"videos": [], "series": []}
     
     try:
         if os.path.exists(videos_dir):
-            for filename in sorted(os.listdir(videos_dir)):
-                ext = os.path.splitext(filename)[1].lower()
-                if ext in allowed_extensions:
-                    # Отримуємо розмір файлу
-                    filepath = os.path.join(videos_dir, filename)
-                    size = os.path.getsize(filepath)
-                    size_str = format_file_size(size)
-                    
-                    videos.append({
-                        "name": filename,
-                        "url": f"/video/{filename}",
-                        "size": size_str,
-                        "type": ext[1:]  # без крапки
-                    })
+            for item in sorted(os.listdir(videos_dir)):
+                item_path = os.path.join(videos_dir, item)
+                if os.path.isfile(item_path):
+                    ext = os.path.splitext(item)[1].lower()
+                    if ext in allowed_extensions:
+                        # Отримуємо розмір файлу
+                        size = os.path.getsize(item_path)
+                        size_str = format_file_size(size)
+                        
+                        result["videos"].append({
+                            "name": item,
+                            "url": f"/video/{item}",
+                            "size": size_str,
+                            "type": ext[1:]  # без крапки
+                        })
+                    elif ext == '.txt':
+                        # Читаємо URL з текстового файлу
+                        with open(item_path, 'r', encoding='utf-8') as f:
+                            url = f.read().strip()
+                        if url:
+                            result["videos"].append({
+                                "name": item.replace('.txt', ''),
+                                "url": url,
+                                "size": "--",
+                                "type": "url"
+                            })
+                elif os.path.isdir(item_path):
+                    # Знайдемо всі відео в папці серії
+                    episodes = []
+                    for filename in sorted(os.listdir(item_path)):
+                        file_path = os.path.join(item_path, filename)
+                        if os.path.isfile(file_path):
+                            ext = os.path.splitext(filename)[1].lower()
+                            if ext in allowed_extensions:
+                                size = os.path.getsize(file_path)
+                                size_str = format_file_size(size)
+                                episodes.append({
+                                    "name": filename,
+                                    "url": f"/video/{item}/{filename}",
+                                    "size": size_str,
+                                    "type": ext[1:]
+                                })
+                            elif ext == '.txt':
+                                # Читаємо URL з текстового файлу
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    url = f.read().strip()
+                                if url:
+                                    episodes.append({
+                                        "name": filename.replace('.txt', ''),
+                                        "url": url,
+                                        "size": "--",
+                                        "type": "url"
+                                    })
+                    if episodes:
+                        result["series"].append({
+                            "name": item,
+                            "path": item,
+                            "episodes": episodes
+                        })
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={"error": f"Failed to list videos: {str(e)}"}
         )
     
-    return {"videos": videos}
+    return result
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -77,6 +128,173 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
     else:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+# API для створення серії та додавання епізодів
+@app.post("/api/series")
+async def create_series(series_data: dict):
+    """Створює нову серію та додає епізоди."""
+    series_name = series_data.get("name")
+    episodes = series_data.get("episodes", [])
+
+    if not series_name:
+        return JSONResponse(status_code=400, content={"error": "Series name is required"})
+
+    series_dir = os.path.join("static/videos", series_name)
+
+    try:
+        if not os.path.exists(series_dir):
+            os.makedirs(series_dir)
+
+        # Обробляємо епізоди
+        for i, episode in enumerate(episodes):
+            episode_name = episode.get("name")
+            episode_url = episode.get("url")
+
+            if episode_name and episode_url:
+                # Створюємо файл з посиланням
+                episode_filename = f"episode_{i+1:02d}_{episode_name.replace(' ', '_')}"
+                if not episode_filename.lower().endswith(('.mp4', '.webm', '.ogg', '.mkv', '.mov')):
+                    episode_filename += ".txt"
+
+                episode_path = os.path.join(series_dir, episode_filename)
+
+                with open(episode_path, 'w', encoding='utf-8') as f:
+                    f.write(episode_url)
+
+        return JSONResponse(status_code=201, content={"success": True, "message": "Series created successfully"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to create series: {str(e)}"})
+
+
+# API для додавання одиночного відео
+@app.post("/api/single-video")
+async def add_single_video(video_data: dict):
+    """Додає одиночне відео до папки videos."""
+    video_name = video_data.get("name")
+    video_url = video_data.get("url")
+
+    if not video_name or not video_url:
+        return JSONResponse(status_code=400, content={"error": "Video name and URL are required"})
+
+    videos_dir = "static/videos"
+
+    try:
+        if not os.path.exists(videos_dir):
+            os.makedirs(videos_dir)
+
+        # Створюємо файл з посиланням
+        video_filename = f"{video_name.replace(' ', '_')}"
+        if not video_filename.lower().endswith(('.mp4', '.webm', '.ogg', '.mkv', '.mov')):
+            video_filename += ".txt"
+
+        video_path = os.path.join(videos_dir, video_filename)
+
+        with open(video_path, 'w', encoding='utf-8') as f:
+            f.write(video_url)
+
+        return JSONResponse(status_code=201, content={"success": True, "message": "Video added successfully"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to add video: {str(e)}"})
+
+
+# API для видалення серії
+@app.delete("/api/series/{series_name}")
+async def delete_series(series_name: str):
+    """Видаляє серію та всі її епізоди."""
+    series_dir = os.path.join("static/videos", series_name)
+
+    try:
+        if not os.path.exists(series_dir):
+            return JSONResponse(status_code=404, content={"error": "Series not found"})
+
+        # Видаляємо всю папку серії
+        import shutil
+        shutil.rmtree(series_dir)
+
+        return JSONResponse(status_code=200, content={"success": True, "message": "Series deleted successfully"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to delete series: {str(e)}"})
+
+
+# API для оновлення серії
+@app.put("/api/series/{old_series_name}")
+async def update_series(old_series_name: str, series_data: dict):
+    """Оновлює серію та її епізоди."""
+    new_series_name = series_data.get("name")
+    episodes = series_data.get("episodes", [])
+
+    if not new_series_name:
+        return JSONResponse(status_code=400, content={"error": "Series name is required"})
+
+    old_series_dir = os.path.join("static/videos", old_series_name)
+    new_series_dir = os.path.join("static/videos", new_series_name)
+
+    try:
+        if not os.path.exists(old_series_dir):
+            return JSONResponse(status_code=404, content={"error": "Series not found"})
+
+        # Якщо назва змінилась, перейменовуємо папку
+        if old_series_name != new_series_name:
+            if os.path.exists(new_series_dir):
+                return JSONResponse(status_code=400, content={"error": "Series with this name already exists"})
+            os.rename(old_series_dir, new_series_dir)
+        else:
+            new_series_dir = old_series_dir
+
+        # Видаляємо старі файли епізодів
+        for filename in os.listdir(new_series_dir):
+            file_path = os.path.join(new_series_dir, filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+
+        # Створюємо нові файли епізодів
+        for i, episode in enumerate(episodes):
+            episode_name = episode.get("name")
+            episode_url = episode.get("url")
+
+            if episode_name and episode_url:
+                episode_filename = f"episode_{i+1:02d}_{episode_name.replace(' ', '_')}"
+                if not episode_filename.lower().endswith(('.mp4', '.webm', '.ogg', '.mkv', '.mov')):
+                    episode_filename += ".txt"
+
+                episode_path = os.path.join(new_series_dir, episode_filename)
+
+                with open(episode_path, 'w', encoding='utf-8') as f:
+                    f.write(episode_url)
+
+        return JSONResponse(status_code=200, content={"success": True, "message": "Series updated successfully"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to update series: {str(e)}"})
+
+
+# API для видалення одиночного відео
+@app.delete("/api/single-video/{video_name}")
+async def delete_single_video(video_name: str):
+    """Видаляє одиночне відео."""
+    videos_dir = "static/videos"
+
+    try:
+        # Знаходимо файл відео
+        video_filename = f"{video_name.replace(' ', '_')}"
+        if not video_filename.lower().endswith(('.mp4', '.webm', '.ogg', '.mkv', '.mov', '.txt')):
+            video_filename += ".txt"
+
+        video_path = os.path.join(videos_dir, video_filename)
+
+        if not os.path.exists(video_path):
+            return JSONResponse(status_code=404, content={"error": "Video not found"})
+
+        os.remove(video_path)
+
+        return JSONResponse(status_code=200, content={"success": True, "message": "Video deleted successfully"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to delete video: {str(e)}"})
 
 
 # Conflict resolution tolerance in seconds
